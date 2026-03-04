@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.DS_Store
+Thumbs.db
+
+# ── Ambiente e credenciais — NUNCA commitar ───────────────────
+.env
+
+# ── Relatórios gerados ────────────────────────────────────────
+*.log
+relatorio_*.json
+relatorios/
+
+# ── Virtualenv ────────────────────────────────────────────────
+.venv/
+venv/
+env/
