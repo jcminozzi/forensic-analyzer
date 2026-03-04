@@ -1,6 +1,6 @@
 # 🛡️ Forensic Analyzer — SOC File & Boleto Tool
 
-Ferramenta de análise forense de arquivos e validação de boletos bancários, desenvolvida para uso em contexto de SOC (Security Operations Center) e estudos de cybersecurity.
+Ferramenta de análise forense de arquivos, emails e boletos bancários desenvolvida para uso em SOC (Security Operations Center) e estudos de cybersecurity.
 
 > **Desenvolvido por:** João Carlos Minozzi  
 > **Contexto:** SOC / Cybersecurity enthusiast — uso educacional
@@ -11,38 +11,53 @@ Ferramenta de análise forense de arquivos e validação de boletos bancários, 
 
 ### Análise de Arquivos
 - **Hashes**: MD5, SHA-1, SHA-256, SHA-512 (calculados localmente)
-- **Magic bytes**: detecção do tipo real do arquivo (bypassa extensão falsificada)
-- **Spoofing de extensão**: detecta quando .doc é na verdade um PE, etc.
-- **Entropia de Shannon**: identifica conteúdo cifrado/empacotado/ofuscado
+- **Magic bytes**: detecção do tipo real — bypassa extensão falsificada
+- **Spoofing de extensão**: detecta quando `.doc` é na verdade um PE, etc.
+- **Entropia de Shannon**: identifica conteúdo cifrado, empacotado ou ofuscado
 - **Hex dump**: primeiros 128 bytes em formato hexadecimal
 - **Timestamps**: data de criação, modificação e acesso do arquivo no sistema
+- **Extração de strings**: IPs, URLs, emails e IOCs direto dos bytes brutos
 
 ### Análise por Tipo
-| Tipo | Análise |
-|------|---------|
+| Tipo | O que é analisado |
+|------|-------------------|
 | **EXE / DLL** | Cabeçalho PE: arquitetura, timestamp de compilação, ASLR, DEP/NX, CFG, seções suspeitas (UPX, Themida, VMProtect), seções W+X |
-| **PDF** | Versão, metadados completos (Creator, Producer, datas), JavaScript embutido, /OpenAction, /EmbeddedFile, strings suspeitas, URLs, formulários, detector de boletos |
-| **ZIP / DOCX / XLSX** | Listagem de arquivos internos, flag de executáveis e documentos com macros |
-| **Qualquer** | Extração de strings ASCII: IPs, URLs, emails, IOCs genéricos |
+| **PDF** | Versão, metadados completos, JavaScript embutido, /OpenAction, /EmbeddedFile, strings suspeitas, URLs, detector automático de boleto |
+| **ZIP / DOCX / XLSX** | Listagem interna, flag de executáveis e documentos com macros |
+| **EML** | Spoofing, SPF/DKIM/DMARC, cadeia de Received, display name fraud, homógrafos, anexos perigosos |
+| **Qualquer binário** | Hashes, entropia, magic bytes, strings, IPs, URLs |
+
+### Análise de Email (.eml)
+- **SPF / DKIM / DMARC** lidos do header `Authentication-Results`
+- **From vs Reply-To / Return-Path**: detecta domínio divergente
+- **Display name spoofing**: "Banco Bradesco" enviando de `bradesc0.com`
+- **Ataque homógrafo**: caracteres Unicode disfarçados no domínio remetente
+- **Provedores temporários/descartáveis**: mailinator, guerrillamail, etc.
+- **Cadeia de Received**: todos os hops com IPs e timestamps
+- **Anexos perigosos**: `.exe`, `.docm`, `.lnk`, `.iso`, `.ps1`, etc.
+- **URLs com IP direto** e encurtadores suspeitos no corpo
+
+### Varredura de Pasta
+- Recursiva ou só na raiz, com ou sem filtro de extensões
+- Ignora automaticamente pastas de sistema/desenvolvimento
+- Score de risco por arquivo em tempo real
+- Sumário final com destaque dos mais suspeitos
+- Exportação de relatório JSON da varredura completa
 
 ### Validação de Boletos (FEBRABAN)
-| Formato | Suporte |
+| Formato | Dígitos |
 |---------|---------|
-| Linha digitável bancária | 47 dígitos |
-| Código de barras bancário | 44 dígitos |
-| Arrecadação / concessionária | 48 dígitos (início em 8) |
+| Linha digitável bancária | 47 |
+| Código de barras bancário | 44 |
+| Arrecadação / concessionária | 48 (início em 8) |
 
-- Validação por **módulo 10** e **módulo 11 FEBRABAN** campo a campo
-- Decode do **campo livre** por banco (BB, Bradesco, Itaú, CEF, Santander, Sicredi, Sicoob...)
-- Reconstrução do **código de barras** a partir da linha digitável
-- Decodificação do **fator de vencimento** → data real
-- Identificação de **400+ bancos** pela base ISPB
-- Alerta de **boleto vencido**
+- Módulo 10 e 11 FEBRABAN campo a campo
+- Decode do campo livre por banco (BB, Bradesco, Itaú, CEF, Santander...)
+- Fator de vencimento → data real com alerta de vencido
 
 ### VirusTotal
-- Consulta o hash SHA-256 na API do VirusTotal (o arquivo **nunca é enviado**)
-- Timeout de 10 segundos
-- Tratamento de rate limit, chave inválida, arquivo não encontrado
+- Consulta hash SHA-256 — o arquivo **nunca é enviado**
+- Timeout configurável, tratamento de rate limit e chave inválida
 
 ---
 
@@ -52,114 +67,135 @@ Ferramenta de análise forense de arquivos e validação de boletos bancários, 
 git clone https://github.com/seu-usuario/forensic-analyzer.git
 cd forensic-analyzer
 pip install -r requirements.txt
+cp .env.example .env   # configure sua chave VT aqui
 ```
 
-**Dependências:**
-- Python 3.10+
-- `colorama` — cores no terminal
-- `requests` — consulta ao VirusTotal
-- `pdfplumber` — extração de texto de PDFs
-- `python-dotenv` — carregamento do `.env`
+**Dependências:** Python 3.10+, `colorama`, `requests`, `pdfplumber`, `python-dotenv`
 
 ---
 
 ## ⚙️ Configuração (.env)
 
-Crie seu arquivo de configuração a partir do template:
-
-```bash
-cp .env.example .env
-```
-
-Edite o `.env` com suas credenciais:
-
 ```env
 VT_API_KEY=sua_chave_do_virustotal_aqui
 VT_TIMEOUT=10
 AUTO_SAVE_JSON=false
+# OUTPUT_DIR=./relatorios
 ```
 
-> O arquivo `.env` já está no `.gitignore` e **nunca será commitado**.  
-> A chave do VirusTotal é gratuita em [virustotal.com](https://www.virustotal.com).
+> O `.env` está no `.gitignore` e nunca será commitado.  
+> Chave gratuita em [virustotal.com](https://www.virustotal.com) → Join us → API Key.
 
-**Prioridade de configuração:**
-1. `--vt-key` passado direto na CLI
-2. Variável de ambiente do sistema (`export VT_API_KEY=...`)
-3. Arquivo `.env` na raiz do projeto
+**Prioridade:** `--vt-key` na CLI > variável de ambiente do sistema > arquivo `.env`
 
-
+---
 
 ## 📖 Uso
 
+### Modo Interativo (recomendado)
+
 ```bash
-# Analisar um arquivo
+python analyzer.py        # abre o menu automaticamente
+python analyzer.py -i     # equivalente
+```
+
+```
+[1] Analisar Arquivo        PDF, EXE, DLL, ZIP, DOCX, EML...
+[2] Analisar Pasta          Varre arquivos recursivamente
+[3] Analisar Email (.eml)   Spoofing, SPF/DKIM/DMARC, Received chain
+[4] Validar Boleto          Linha digitável ou código de barras FEBRABAN
+[5] Configurações           Chave VT, status do .env
+[0] Sair
+```
+
+### Modo Direto (CLI)
+
+```bash
 python analyzer.py arquivo.pdf
-
-# Com VirusTotal
-python analyzer.py arquivo.exe --vt-key SUA_CHAVE_AQUI
-
-# Validar boleto manualmente
+python analyzer.py email.eml
+python analyzer.py malware.exe --vt-key SUA_CHAVE
 python analyzer.py --boleto "34191.09008 61207.727308 71444.640003 8 92690000010000"
-
-# Analisar PDF com boleto + VT + salvar relatório JSON
-python analyzer.py boleto.pdf --vt-key SUA_CHAVE --json relatorio.json
-
-# Análise rápida (sem extração de strings)
+python analyzer.py arquivo.pdf --json relatorio.json
 python analyzer.py arquivo_grande.zip --no-strings
-
-# Apenas hashes e hex dump
-python analyzer.py arquivo.bin --hex-only
 ```
 
 ---
 
-## 📊 Exemplo de Output
+## 📂 De onde o analisador lê arquivos?
+
+A ferramenta lê **qualquer arquivo ou pasta que seu usuário tenha permissão de leitura**. Basta informar o caminho — absoluto, relativo ou com `~`.
+
+### Exemplos de caminhos aceitos
+
+| Sistema | Exemplo |
+|---------|---------|
+| **Windows** | `C:\Users\joao\Downloads\boleto.pdf` |
+| **Windows** | `C:\Users\joao\Desktop\suspeito.exe` |
+| **Windows** | `.\amostras\malware.bin` *(relativo ao diretório atual)* |
+| **Linux** | `/home/joao/downloads/arquivo.pdf` |
+| **Linux** | `/tmp/suspeito.exe` |
+| **Linux/Mac** | `~/Downloads/email.eml` |
+| **macOS** | `/Users/joao/Downloads/boleto.pdf` |
+| **Rede** | `\\servidor\share\arquivo.pdf` *(se acessível)* |
+
+> **Dica Windows:** Arraste o arquivo direto no terminal para colar o caminho completo automaticamente.
+
+### Permissões necessárias
+
+| Local | Precisa de admin/sudo? |
+|-------|----------------------|
+| Pasta pessoal, Downloads, Desktop, Documentos | ❌ Não |
+| `/tmp` (Linux) ou `%TEMP%` (Windows) | ❌ Não |
+| Arquivos de rede mapeados | ❌ Não (se tiver acesso) |
+| `C:\Windows\System32` | ✅ Sim (Windows Admin) |
+| `/etc`, `/sys`, `/proc` | ✅ Sim (sudo Linux) |
+
+### Pastas ignoradas na varredura
+
+Para não analisar arquivos de sistema ou de desenvolvimento, as seguintes pastas são **sempre puladas automaticamente**:
 
 ```
-═════════════════════════════════════════════════════════════════
-  FORENSIC ANALYZER v2.0.0  //  SOC Toolkit
-═════════════════════════════════════════════════════════════════
-
-  ► Carregando arquivo: documento.pdf
-  ► Calculando hashes (MD5 / SHA-1 / SHA-256 / SHA-512)...
-  ► Identificando tipo pelo magic bytes...
-  ► Analisando PDF (metadados + estrutura)...
-  ► Consultando VirusTotal (hash SHA-256)...
-  ► Gerando findings e score de risco...
-
-──────────────── RESULTADO — documento.pdf ────────────────
-
-  🚨  ALTO RISCO — não abrir/executar
-     3 indicador(es) · 1.43s
-     [████████████████░░░░░░░░░░░░░░░░░░░░░░░░] 55/100
-
-┌─ INDICADORES / FINDINGS ────────────────────────────────────┐
-  [CRIT] JavaScript embutido: 2 ocorrência(s) — PDFs com JS podem
-         executar código arbitrário ao abrir...
-  [HIGH] Gerador suspeito: 'FPDF 1.7' — ferramenta genérica
-         frequentemente usada em geração de documentos falsos.
-  [MED]  Metadados ausentes (Creator, Author e Title não definidos)
-└──────────────────────────────────────────────────────────────┘
+__pycache__    .git         .svn          .hg
+node_modules   .venv        venv          env
+dist           build        Windows       System32
+SysWOW64       Program Files             Program Files (x86)
 ```
+
+Pastas ocultas (início com `.`) também são ignoradas por padrão.
+
+### Extensões analisadas em profundidade (filtro de varredura)
+
+Ao ativar o filtro de extensões na varredura de pasta, apenas estes tipos são processados:
+
+| Categoria | Extensões |
+|-----------|-----------|
+| **Executáveis** | `.exe` `.dll` `.sys` `.scr` `.bat` `.cmd` `.ps1` `.vbs` `.js` `.hta` `.wsf` `.pif` `.com` `.msi` `.reg` |
+| **Documentos** | `.pdf` `.doc` `.docx` `.docm` `.xls` `.xlsx` `.xlsm` `.ppt` `.pptx` `.pptm` `.rtf` |
+| **Compactados** | `.zip` `.rar` `.7z` `.gz` `.tar` |
+| **Email** | `.eml` `.msg` |
+| **Outros** | `.jar` `.apk` `.iso` `.img` `.lnk` |
+
+Sem o filtro, **todos os arquivos** da pasta são analisados (hashes, entropia, magic bytes).
+
+### Limite de tamanho
+
+Por padrão, durante a varredura de pasta, arquivos acima de **200 MB** são pulados (configurável no menu). Para arquivos únicos via CLI não há limite — mas arquivos muito grandes naturalmente demoram mais no cálculo de hash e extração de strings.
 
 ---
 
 ## 🔒 Privacidade
 
 - **Nenhum arquivo é enviado a servidores externos**
-- Somente o hash SHA-256 é consultado no VirusTotal (apenas se a chave for fornecida)
-- Toda análise de conteúdo é feita localmente
+- Somente o hash SHA-256 é consultado no VirusTotal (e só se a chave estiver configurada)
+- Toda análise de conteúdo é 100% local
 
 ---
 
 ## ⚠️ Aviso Legal
 
-Esta ferramenta é para uso **educacional e profissional em contexto de SOC**.  
-Resultados são indicativos — não substituem análise forense profissional.
+Uso **educacional e profissional em contexto de SOC**. Resultados são indicativos.
 
-Para boletos: a validação dos dígitos verificadores **NÃO garante autenticidade**.  
-Boletos clonados podem ter DVs corretos com conta beneficiária diferente.  
-**Sempre confirme o CNPJ/CPF e nome do beneficiário no internet banking antes de pagar.**
+Para boletos: DVs corretos **não garantem autenticidade** — boletos clonados podem ter DVs válidos com conta beneficiária trocada. Sempre confirme CNPJ/CPF e nome do beneficiário no internet banking antes de pagar.
 
 ---
 
@@ -167,7 +203,8 @@ Boletos clonados podem ter DVs corretos com conta beneficiária diferente.
 
 ```
 forensic-analyzer/
-├── analyzer.py              # CLI principal
+├── analyzer.py              # CLI principal (entry point)
+├── interactive.py           # Menu interativo TUI
 ├── config.py                # Carrega .env e expõe configurações
 ├── requirements.txt
 ├── .env.example             # Template público — copie para .env
@@ -176,22 +213,24 @@ forensic-analyzer/
 ├── README.md
 └── modules/
     ├── __init__.py
-    ├── output.py            # Helpers de terminal (colorama)
+    ├── output.py            # Helpers de terminal colorido (colorama)
     ├── file_info.py         # Hashes, magic bytes, entropia, timestamps
-    ├── pe_parser.py         # Análise de cabeçalho PE (sem dependências externas)
+    ├── pe_parser.py         # Análise de cabeçalho PE (sem pefile)
     ├── pdf_parser.py        # Análise de PDF (pdfplumber + raw bytes)
+    ├── eml_parser.py        # Análise de email: spoofing, SPF/DKIM/DMARC
     ├── zip_strings.py       # ZIP listing + extração de strings/IPs/URLs
-    ├── boleto.py            # Validação completa de boletos FEBRABAN
+    ├── boleto.py            # Validação FEBRABAN (bancário + arrecadação)
     ├── findings.py          # Engine de findings e score de risco
-    └── virustotal.py        # API VirusTotal com timeout
+    └── virustotal.py        # API VirusTotal com timeout configurável
 ```
 
 ---
 
 ## 🤝 Contribuindo
 
-Issues e PRs são bem-vindos. Áreas de melhoria:
-- Suporte a RAR/7z internos
-- Análise de scripts (VBS, PS1, JS)
-- Integração com outras threat intel APIs (AbuseIPDB, URLScan.io)
+Issues e PRs são bem-vindos. Ideias:
+- Suporte a RAR/7z (listagem interna)
+- Análise estática de scripts VBS, PS1, JS
+- Integração com AbuseIPDB e URLScan.io
+- Modo watch: monitorar pasta em tempo real
 - Output em HTML

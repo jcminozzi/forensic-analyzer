@@ -6,12 +6,14 @@
 ╚══════════════════════════════════════════════════════════════════╝
 
 Uso:
-  python analyzer.py arquivo.pdf
+  python analyzer.py                          # Modo interativo (menu)
+  python analyzer.py -i                       # Modo interativo explícito
+  python analyzer.py arquivo.pdf              # Análise direta
+  python analyzer.py email.eml                # Análise de email (spoofing)
   python analyzer.py arquivo.exe --vt-key SUA_CHAVE_VT
   python analyzer.py --boleto "34191.09008 61207.727308 71444.640003 8 92690000010000"
-  python analyzer.py arquivo.pdf --boleto --vt-key SUA_CHAVE_VT
   python analyzer.py arquivo.pdf --json relatorio.json
-  python analyzer.py arquivo.pdf --no-strings   (pula extração de strings — mais rápido)
+  python analyzer.py arquivo.pdf --no-strings
 
 Aviso: esta ferramenta é para uso educacional e de SOC.
 O arquivo analisado NUNCA é enviado a servidores externos.
@@ -40,6 +42,7 @@ from modules.pe_parser    import parse as parse_pe
 from modules.pdf_parser   import analyze as analyze_pdf
 from modules.zip_strings  import parse_zip, extract_strings
 from modules.boleto       import validate as validate_boleto
+from modules.eml_parser   import analyze as analyze_eml
 from modules.findings     import generate as gen_findings, compute_score, verdict_from_score
 from modules.virustotal   import query_hash as vt_query
 from modules.output       import Fore, Style
@@ -448,6 +451,8 @@ def main():
     parser.add_argument("--boleto",    nargs="?", const="__from_pdf__",
                         metavar="CODIGO",
                         help="Validar linha digitável/código de barras de boleto")
+    parser.add_argument("-i", "--interactive", action="store_true",
+                        help="Modo interativo com menu no terminal")
     parser.add_argument("--vt-key",    default="", metavar="API_KEY",
                         help="Chave de API do VirusTotal")
     parser.add_argument("--no-strings", action="store_true",
@@ -460,6 +465,12 @@ def main():
                         version=f"forensic-analyzer {VERSION}")
 
     args = parser.parse_args()
+
+    # ── Modo interativo: sem args OU -i explícito ─────────────────────────────
+    if args.interactive or (not args.file and not args.boleto):
+        from interactive import run
+        run()
+        return
 
     # ── Header ────────────────────────────────────────────────────────────────
     print(f"\n{Fore.CYAN}{'═'*65}")
@@ -483,11 +494,14 @@ def main():
 
     # ── File mode ─────────────────────────────────────────────────────────────
     if args.file:
-        report = analyze_file(args.file, vt_key, not args.no_strings)
-
-    if not args.file and not args.boleto:
-        parser.print_help()
-        sys.exit(0)
+        ext = Path(args.file).suffix.lower()
+        if ext == ".eml":
+            # Rota para análise de email
+            from interactive import _run_eml
+            out.banner(f"ANÁLISE DE EMAIL — {os.path.basename(args.file)}", Fore.CYAN)
+            _run_eml(args.file)
+        else:
+            report = analyze_file(args.file, vt_key, not args.no_strings)
 
     # ── JSON output (manual ou auto-save) ─────────────────────────────────────
     json_path = args.json
